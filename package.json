@@ -1,0 +1,18 @@
+{
+  "name": "ducklin",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run src/index.ts"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/bun": "latest",
+    "@types/luxon": "^3.7.1",
+    "@slack/bolt": "^4.5.0",
+    "luxon": "^3.7.2"
+  }
+}
