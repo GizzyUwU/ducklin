@@ -1,7 +1,6 @@
 import type { App } from "@slack/bolt";
 import type { AchievementRequest, AchievementResponse } from "./types/achievement";
 import { grabUser } from "../login";
-import { DateTime } from "luxon";
 
 export default async (app: App) => {
     const missingVars = [];
@@ -17,7 +16,7 @@ export default async (app: App) => {
         async function grabAchievementAndPost() {
             const user = await grabUser(process.env.EDULINK_IDENTIFIER!, process.env.EDULINK_USERNAME!, process.env.EDULINK_PASSWORD!, process.env.EDULINK_URL!);
 
-            const behaviourResponse = await Bun.fetch(process.env.EDULINK_URL + "/api/?method=EduLink.Achievement", {
+            const achievementResponse = await Bun.fetch(process.env.EDULINK_URL + "/api/?method=EduLink.Achievement", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -35,16 +34,16 @@ export default async (app: App) => {
                 }),
             });
 
-            if (!behaviourResponse.ok) {
+            if (!achievementResponse.ok) {
                 console.error(
                     "[ERROR] Failed to login! Status Code:",
-                    behaviourResponse.status,
-                    behaviourResponse.statusText
+                    achievementResponse.status,
+                    achievementResponse.statusText
                 );
                 process.exit(1);
             }
 
-            const achievementData = (await behaviourResponse.json()) as AchievementResponse;
+            const achievementData = (await achievementResponse.json()) as AchievementResponse;
 
             if (!achievementData.result || !Array.isArray(achievementData.result.achievement)) {
                 console.error("[EDULINK] Invalid achievement response:", achievementData);
@@ -52,17 +51,17 @@ export default async (app: App) => {
             }
 
             const cacheFile = Bun.file("achievementCache.json");
-            let cachedBehaviour: AchievementResponse.AchievementType[] = [];
+            let cachedAchievement: AchievementResponse.AchievementType[] = [];
             if (!await cacheFile.exists()) {
                 await Bun.write("achievementCache.json", JSON.stringify(achievementData, null, 2));
                 return;
             } else {
                 const cache = await cacheFile.json()
-                cachedBehaviour = cache.result.behaviour;
+                cachedAchievement = cache.result.achievement;
             }
 
             const newAchievements = achievementData.result.achievement.filter(
-                (b: AchievementResponse.AchievementType) => !cachedBehaviour.some(c => c.id === b.id)
+                (b: AchievementResponse.AchievementType) => !cachedAchievement.some(c => c.id === b.id)
             );
 
             await Bun.write("achievementCache.json", JSON.stringify(achievementData, null, 2));

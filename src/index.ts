@@ -8,7 +8,7 @@ const app = new App({
     signingSecret: process.env.SLACK_SIGNING_SECRET,
     token: process.env.SLACK_BOT_TOKEN,
     appToken: process.env.SLACK_APP_TOKEN,
-    socketMode: true,
+    socketMode: Boolean(process.env.SOCKET_MODE)
 })
 async function loadModules(dir: string) {
     const entries = await readdir(dir, { withFileTypes: true });
