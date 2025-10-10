@@ -10,6 +10,7 @@ const app = new App({
     appToken: process.env.SLACK_APP_TOKEN,
     socketMode: Boolean(process.env.SOCKET_MODE)
 })
+
 async function loadModules(dir: string) {
     const entries = await readdir(dir, { withFileTypes: true });
 
@@ -48,5 +49,5 @@ async function loadModules(dir: string) {
     await loadModules("src/modules");
     await app.start(process.env.PORT || 3000);
 
-    app.logger.info('Connected to Slack Successfully');
+    app.logger.info(`Connected to Slack Successfully ${process.env.SOCKET_MODE ? "" : `on port ${process.env.PORT}`}`);
 })();
