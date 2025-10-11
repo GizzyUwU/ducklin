@@ -1,6 +1,6 @@
 import type { AllMiddlewareArgs, SlackEventMiddlewareArgs } from '@slack/bolt';
 import { App } from "@slack/bolt"
-import { readdir, realpath } from "node:fs/promises";
+import { readdir, realpath, mkdir, stat  } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 const loadedModules = new Set<string>();
@@ -26,7 +26,6 @@ async function loadModules(dir: string) {
             const resolvedPath = await realpath(fullPath);
             if (loadedModules.has(resolvedPath)) continue;
             loadedModules.add(resolvedPath);
-            console.log(loadedModules)
             try {
                 const mod = await import(pathToFileURL(resolvedPath).href);
                 if (typeof mod.default === "function") await mod.default(app);
@@ -41,6 +40,11 @@ async function loadModules(dir: string) {
 
 
 (async () => {
+    try {
+        await stat("./cache")
+    } catch {
+        await mkdir("./cache")
+    }
     await loadModules("src/modules");
     await app.start(process.env.PORT || 3000);
     app.logger.info(`Connected to Slack Successfully ${process.env.SLACK_SOCKET_MODE === "true" ? "" : `on port ${process.env.PORT}`}`);

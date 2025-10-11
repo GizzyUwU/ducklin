@@ -13,6 +13,20 @@ export default async (app: App) => {
         app.logger.warn("[EDULINK] Disabled due to missing environment variables:", missingVars.join(", "))
         return
     } else {
+        async function getLastRun(): Promise<number | null> {
+            let latest: number | null = null;
+            const f = Bun.file("cache/achievementCache.json");
+            if (await f.exists()) {
+                const data = await f.json();
+                if (data.lastRun) {
+                    const ts = Number(data.lastRun);
+                    if (!isNaN(ts) && (latest === null || ts > latest)) {
+                        latest = ts;
+                    }
+                }
+            }
+            return latest;
+        }
         async function grabAchievementAndPost() {
             const user = await grabUser(process.env.EDULINK_IDENTIFIER!, process.env.EDULINK_USERNAME!, process.env.EDULINK_PASSWORD!, process.env.EDULINK_URL!);
 
@@ -50,36 +64,48 @@ export default async (app: App) => {
                 return;
             }
 
-            const cacheFile = Bun.file("achievementCache.json");
+            const cacheFile = Bun.file("cache/achievementCache.json");
             let cachedAchievement: AchievementResponse.AchievementType[] = [];
-            if (!await cacheFile.exists()) {
-                await Bun.write("achievementCache.json", JSON.stringify(achievementData, null, 2));
-                return;
-            } else {
+            let achievementCache = {
+                lastRun: Date.now(),
+                data: achievementData
+            };
+            if (await cacheFile.exists()) {
                 const cache = await cacheFile.json()
-                cachedAchievement = cache.result.achievement;
-            }
+                cachedAchievement = cache.data.result.achievement;
 
-            const newAchievements = achievementData.result.achievement.filter(
-                (b: AchievementResponse.AchievementType) => !cachedAchievement.some(c => c.id === b.id)
-            );
-
-            await Bun.write("achievementCache.json", JSON.stringify(achievementData, null, 2));
-
-            if (newAchievements.length > 0) {
-                const totalPoints = achievementData.result.achievement.reduce(
-                    (sum, b) => sum + (Number(b.points) ?? 0),
-                    0
+                const newAchievements = achievementData.result.achievement.filter(
+                    (b: AchievementResponse.AchievementType) => !cachedAchievement.some(c => c.id === b.id)
                 );
 
-                app.client.chat.postMessage({ channel: String(process.env.CHANNEL), text: `Yipee new achievement points. Total Achievement Points ${totalPoints}` })
-            }
 
-            return;
+                if (newAchievements.length > 0) {
+                    const totalPoints = achievementData.result.achievement.reduce(
+                        (sum, b) => sum + (Number(b.points) ?? 0),
+                        0
+                    );
+
+                    app.client.chat.postMessage({ channel: String(process.env.CHANNEL), text: `Yipee new achievement points. Total Achievement Points ${totalPoints}` })
+                }
+
+                await Bun.write("cache/achievementCache.json", JSON.stringify(achievementCache, null, 2));
+                return;
+            } else {
+                await Bun.write("cache/achievementCache.json", JSON.stringify(achievementCache, null, 2));
+                return;
+            }
         }
 
-        grabAchievementAndPost();
+        const lastRun = await getLastRun();
+        const now = Date.now();
 
-        setTimeout(() => grabAchievementAndPost, 10 * 60 * 1000)
+        if (lastRun && now - lastRun < 10 * 60 * 1000) {
+            const waitTime = 10 * 60 * 1000 - (now - lastRun);
+            console.log(`[EdulinkOne - Achievement] Last check was less than 10 minutes ago. Waiting ${Math.ceil(waitTime / 1000)}s.`);
+            setTimeout(grabAchievementAndPost, waitTime);
+        } else {
+            grabAchievementAndPost();
+            setInterval(grabAchievementAndPost, 10 * 60 * 1000);
+        }
     }
 };
