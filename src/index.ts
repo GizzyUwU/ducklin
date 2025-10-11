@@ -1,8 +1,9 @@
 import type { AllMiddlewareArgs, SlackEventMiddlewareArgs } from '@slack/bolt';
 import { App } from "@slack/bolt"
-import { readdir, stat } from "node:fs/promises";
+import { readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+const loadedModules = new Set<string>();
 
 const app = new App({
     signingSecret: process.env.SLACK_SIGNING_SECRET,
@@ -11,6 +12,7 @@ const app = new App({
     socketMode: process.env.SLACK_SOCKET_MODE === "true"
 })
 
+
 async function loadModules(dir: string) {
     const entries = await readdir(dir, { withFileTypes: true });
 
@@ -18,32 +20,25 @@ async function loadModules(dir: string) {
         const fullPath = join(dir, entry.name);
 
         if (entry.isDirectory()) {
-            if (entry.name === "types") {
-                continue;
-            }
+            if (entry.name === "types") continue;
             await loadModules(fullPath);
         } else if (entry.isFile() && entry.name === "index.ts") {
+            const resolvedPath = await realpath(fullPath);
+            if (loadedModules.has(resolvedPath)) continue;
+            loadedModules.add(resolvedPath);
+            console.log(loadedModules)
             try {
-                const mod = await import(pathToFileURL(fullPath).href);
+                const mod = await import(pathToFileURL(resolvedPath).href);
+                if (typeof mod.default === "function") await mod.default(app);
 
-
-                if (typeof mod.default === "function") {
-                    await mod.default(app);
-                }
-
-                for (const [key, fn] of Object.entries(mod)) {
-                    if (typeof fn === "function") {
-                        await fn(app);
-                    }
-                }
-
-                app.logger.info(`Loaded module: ${fullPath}`);
+                app.logger.info(`Loaded module: ${resolvedPath}`);
             } catch (err) {
-                app.logger.error(`Failed to load module ${fullPath}:`, err);
+                app.logger.error(`Failed to load module ${resolvedPath}:`, err);
             }
         }
     }
 }
+
 
 (async () => {
     await loadModules("src/modules");
