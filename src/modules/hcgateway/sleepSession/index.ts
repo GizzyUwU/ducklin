@@ -83,7 +83,7 @@ export default async (app: App) => {
             const sleepEnd = DateTime.fromISO(lastSleep.end).setZone("Europe/London");
             const duration = sleepEnd.diff(sleepStart, ["hours", "minutes"]);
 
-            const message = `Woah gizzy fell eep at ${sleepStart.toFormat("HH:mm")} then woke up at ${sleepEnd.toFormat("HH:mm")} making a total sleep of ${Math.floor(duration.hours)}h ${Math.round(duration.minutes)}`;
+            const message = `Woah gizzy fell eep at ${sleepStart.toFormat("HH:mm")} then woke up at ${sleepEnd.toFormat("HH:mm")} making a total sleep of ${Math.floor(duration.hours)}h ${Math.round(duration.minutes)}m`;
 
             await app.client.chat.postMessage({
                 channel: String(process.env.CHANNEL),
