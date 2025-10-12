@@ -33,10 +33,9 @@ export default async (app: App) => {
         async function grabStepsAndPost() {
             const user = await grabUser(process.env.HC_GATEWAY_SERVER!, process.env.HC_GATEWAY_USERNAME!, process.env.HC_GATEWAY_PASSWORD!);
             if (user.token.length > 0) {
-                const cacheFile = Bun.file("stepsCache.json");
+                const cacheFile = Bun.file("cache/stepsCache.json");
                 const todayStart = DateTime.now().toUTC().startOf("day").toISO();
                 const todayEnd = DateTime.now().toUTC().endOf("day").toISO();
-                let steps = 0;
                 let stepsCache: {
                     lastRun?: number;
                     data?: StepsResponse;
@@ -76,14 +75,14 @@ export default async (app: App) => {
 
         const lastRun = await getLastRun();
         const now = Date.now()
-        if (lastRun && now - lastRun < 60 * 60 * 1000) {
-            const waitTime = 60 * 60 * 1000 - (now - lastRun);
+        if (lastRun && now - lastRun < 70 * 60 * 1000) {
+            const waitTime = 70 * 60 * 1000 - (now - lastRun);
             console.log(`[HC_GATEWAY - Steps] Last post was less than 60 minutes ago. Waiting ${Math.ceil(waitTime / 1000)}s.`);
             setTimeout(grabStepsAndPost, waitTime);
         } else {
             console.log("beep", lastRun, now)
             grabStepsAndPost();
-            setInterval(grabStepsAndPost, 60 * 60 * 1000);
+            setInterval(grabStepsAndPost, 70 * 60 * 1000);
         }
     }
 }
