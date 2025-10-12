@@ -64,7 +64,7 @@ export default async (app: App) => {
                     const newSteps = newData.reduce((sum, item) => sum + (item.data.count ?? 0), 0);
                     const totalSteps = data.reduce((sum, item) => sum + (item.data.count ?? 0), 0);
 
-                    if (postEODData) {
+                    if (!postEODData) {
                         await app.client.chat.postMessage({
                             channel: String(process.env.CHANNEL),
                             text: `${newSteps} steps added. Total steps today is ${totalSteps} `
