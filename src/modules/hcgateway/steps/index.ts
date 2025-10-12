@@ -3,6 +3,7 @@ import type { StepsResponse, StepsItem } from "./types/steps";
 import { grabData } from "../fetch";
 import { grabUser } from "../login";
 import { DateTime } from "luxon";
+let postEODData = false;
 
 export default async (app: App) => {
     const missingVars = [];
@@ -15,8 +16,9 @@ export default async (app: App) => {
         console.warn("[HC_GATEWAY] Disabled due to missing environment variables:", missingVars.join(", "))
         return;
     } else {
-        async function getLastRun(): Promise<number | null> {
+        async function getLastRun(): Promise<{ latest: number | null, eodPosted: boolean }> {
             let latest: number | null = null;
+            let eodPosted: boolean = false;
             const f = Bun.file("cache/stepsCache.json");
             if (await f.exists()) {
                 const data = await f.json();
@@ -26,8 +28,11 @@ export default async (app: App) => {
                         latest = ts;
                     }
                 }
+                if (data.eodPosted) {
+                    eodPosted = true;
+                }
             }
-            return latest;
+            return { latest, eodPosted }
         }
 
         async function grabStepsAndPost() {
@@ -39,6 +44,7 @@ export default async (app: App) => {
                 let stepsCache: {
                     lastRun?: number;
                     data?: StepsResponse;
+                    eodPosted?: boolean;
                 } = {};
 
                 if (await cacheFile.exists()) {
@@ -58,15 +64,30 @@ export default async (app: App) => {
                     const newSteps = newData.reduce((sum, item) => sum + (item.data.count ?? 0), 0);
                     const totalSteps = data.reduce((sum, item) => sum + (item.data.count ?? 0), 0);
 
-                    await app.client.chat.postMessage({
-                        channel: String(process.env.CHANNEL),
-                        text: `${newSteps} steps added. Total steps today is ${totalSteps} `
-                    })
+                    if (postEODData) {
+                        await app.client.chat.postMessage({
+                            channel: String(process.env.CHANNEL),
+                            text: `${newSteps} steps added. Total steps today is ${totalSteps} `
+                        })
+                    } else {
+                        await app.client.chat.postMessage({
+                            channel: String(process.env.CHANNEL),
+                            text: `Woah end of day already? Damn anyway the total of steps today is ${totalSteps}!`
+                        })
+                    }
                 }
 
-                stepsCache = {
-                    lastRun: Date.now(),
-                    data
+                if (postEODData) {
+                    stepsCache = {
+                        lastRun: Date.now(),
+                        data,
+                        eodPosted: true
+                    }
+                } else {
+                    stepsCache = {
+                        lastRun: Date.now(),
+                        data
+                    }
                 }
 
                 await Bun.write("cache/stepsCache.json", JSON.stringify(stepsCache, null, 2))
@@ -75,12 +96,16 @@ export default async (app: App) => {
 
         const lastRun = await getLastRun();
         const now = Date.now()
-        if (lastRun && now - lastRun < 70 * 60 * 1000) {
-            const waitTime = 70 * 60 * 1000 - (now - lastRun);
+        if (lastRun && now - lastRun.latest! < 70 * 60 * 1000) {
+            const waitTime = 70 * 60 * 1000 - (now - lastRun.latest!);
             console.log(`[HC_GATEWAY - Steps] Last post was less than 60 minutes ago. Waiting ${Math.ceil(waitTime / 1000)}s.`);
             setTimeout(grabStepsAndPost, waitTime);
         } else {
-            console.log("beep", lastRun, now)
+            const londonNow = DateTime.now().setZone("Europe/London");
+            const eod = londonNow.hour >= 23;
+            if (eod && !lastRun.eodPosted) {
+                postEODData = true
+            }
             grabStepsAndPost();
             setInterval(grabStepsAndPost, 70 * 60 * 1000);
         }
