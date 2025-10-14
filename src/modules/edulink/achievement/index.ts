@@ -99,13 +99,13 @@ export default async (app: App) => {
         const lastRun = await getLastRun();
         const now = Date.now();
 
-        if (lastRun && now - lastRun < 10 * 60 * 1000) {
-            const waitTime = 10 * 60 * 1000 - (now - lastRun);
+        if (lastRun && now - lastRun < (Number(process.env.INTERVAL) || 15) * 60 * 1000) {
+            const waitTime = (Number(process.env.INTERVAL) || 15) * 60 * 1000 - (now - lastRun);
             console.log(`[EdulinkOne - Achievement] Last check was less than 10 minutes ago. Waiting ${Math.ceil(waitTime / 1000)}s.`);
             setTimeout(grabAchievementAndPost, waitTime);
         } else {
             grabAchievementAndPost();
-            setInterval(grabAchievementAndPost, 10 * 60 * 1000);
+            setInterval(grabAchievementAndPost, (Number(process.env.INTERVAL) || 15) * 60 * 1000);
         }
     }
 };

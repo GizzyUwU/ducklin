@@ -96,8 +96,8 @@ export default async (app: App) => {
 
         const lastRun = await getLastRun();
         const now = Date.now()
-        if (lastRun && now - lastRun.latest! < 70 * 60 * 1000) {
-            const waitTime = 70 * 60 * 1000 - (now - lastRun.latest!);
+        if (lastRun && now - lastRun.latest! < (Number(process.env.INTERVAL) || 15) * 60 * 1000) {
+            const waitTime = (Number(process.env.INTERVAL) || 15) * 60 * 1000 - (now - lastRun.latest!);
             console.log(`[HC_GATEWAY - Steps] Last post was less than 60 minutes ago. Waiting ${Math.ceil(waitTime / 1000)}s.`);
             setTimeout(grabStepsAndPost, waitTime);
         } else {
@@ -107,7 +107,7 @@ export default async (app: App) => {
                 postEODData = true
             }
             grabStepsAndPost();
-            setInterval(grabStepsAndPost, 70 * 60 * 1000);
+            setInterval(grabStepsAndPost, (Number(process.env.INTERVAL) || 15) * 60 * 1000);
         }
     }
 }

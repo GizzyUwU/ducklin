@@ -66,7 +66,7 @@ export default async (app: App) => {
                     DateTime.fromISO(a.end).toMillis()
             );
 
-            const now = DateTime.now().toUTC();
+            console.log(data[0], sorted[0])
             const lastSleep = sorted[0];
 
             if (!lastSleep) {
@@ -103,15 +103,15 @@ export default async (app: App) => {
         const lastRun = await getLastRun();
         const now = Date.now();
 
-        if (lastRun.latest && now - lastRun.latest < 70 * 60 * 1000) {
-            const waitTime = 70 * 60 * 1000 - (now - lastRun.latest);
+        if (lastRun.latest && now - lastRun.latest < (Number(process.env.INTERVAL) || 15) * 60 * 1000) {
+            const waitTime = (Number(process.env.INTERVAL) || 15) * 60 * 1000 - (now - lastRun.latest);
             console.log(
                 `[HC_GATEWAY - Sleep Session] Last check was less than 70 minutes ago. Waiting ${Math.ceil(waitTime / 1000)}s.`
             );
             setTimeout(grabSleepAndPost, waitTime);
         } else {
             grabSleepAndPost();
-            setInterval(grabSleepAndPost, 70 * 60 * 1000);
+            setInterval(grabSleepAndPost, (Number(process.env.INTERVAL) || 15) * 60 * 1000);
         }
     }
 };
