@@ -84,7 +84,20 @@ export default async (app: App) => {
                         }
                     }
 
-                    if (isDifferent) {
+                    if (item.TrackInfo.TransportStage !== cachedItem.TrackInfo.TransportStage) {
+                        const stageText = {
+                            PU: "Pickup",
+                            DO: "Departed from origin",
+                            AD: "Arrived at destination",
+                            LC: "Local carrier on the way",
+                            DD: "Delivered successfully",
+                        } as const;
+
+                        await app.client.chat.postMessage({
+                            channel: String(process.env.CHANNEL),
+                            text: `Item ending in ${item.Id.slice(-4)} has changed from ${stageText[cachedItem.TrackInfo.TransportStage] ?? "Unknown"} to ${stageText[item.TrackInfo.TransportStage] ?? "Unknown stage"}`,
+                        });
+                    } else if (isDifferent) {
                         const res = await app.client.chat.postMessage({
                             channel: String(process.env.CHANNEL),
                             text: `Update on item ending in ${item.Id.slice(-4)}, ProcessContent changed to ${item.TrackInfo.LastTrackEvent.ProcessContent}`,

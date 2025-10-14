@@ -52,7 +52,7 @@ export type ResultListItem = {
         IsPod: boolean;
         IsSignature: boolean;
         ltsDigest: string;
-        TransportStage: string;
+        TransportStage: "PU" | "DO" | "AD" | "LC" | "DD";
     };
     TrackNotification: [Record<string, any>]
     ResendTrackList: [Record<string, any>]
