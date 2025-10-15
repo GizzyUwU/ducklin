@@ -29,6 +29,34 @@ export default async (app: App) => {
         return { latest: null };
     }
 
+    function dedupeSleepSessions(
+        sessions: { id?: string, start?: string; end?: string; source?: string }[]
+    ) {
+        const validSessions = sessions.filter(
+            (s): s is { id?: string; start: string; end: string; source?: string } =>
+                s.start !== undefined && s.end !== undefined
+        );
+
+        return validSessions
+            .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+            .filter((session, index, arr) => {
+                if (index === 0) return true;
+
+                const prev = arr[index - 1];
+                if (!prev) return true;
+
+                const start = new Date(session.start).getTime();
+                const end = new Date(session.end).getTime();
+                const prevStart = new Date(prev.start).getTime();
+                const prevEnd = new Date(prev.end).getTime();
+
+                const overlap = Math.max(0, Math.min(end, prevEnd) - Math.max(start, prevStart));
+                const duration = Math.min(end - start, prevEnd - prevStart);
+
+                return overlap / duration < 0.9;
+            });
+    }
+
     async function grabSleepAndPost() {
         const user = await grabUser(
             process.env.HC_GATEWAY_SERVER!,
@@ -49,13 +77,14 @@ export default async (app: App) => {
             cache = await cacheFile.json();
         }
 
-        const data = (await grabData(
+        const rawData = (await grabData(
             process.env.HC_GATEWAY_SERVER!,
             "sleepSession",
             {},
             user.token
         )) as SleepSessionResponse;
 
+        const data = dedupeSleepSessions(rawData)
         if (!Array.isArray(data) || data.length === 0) {
             console.log("[HC_GATEWAY - Sleep] No sleep sessions found.");
             return;
@@ -86,14 +115,22 @@ export default async (app: App) => {
         let totalMinutes = 0;
         let sleepStart: DateTime | null = null;
         let sleepEnd: DateTime | null = null;
+
         for (const s of nightSessions) {
             const start = DateTime.fromISO(s.start);
             const end = DateTime.fromISO(s.end);
             const overlap = nightInterval.intersection(Interval.fromDateTimes(start, end));
+
             if (overlap) {
-                totalMinutes += overlap.toDuration("minutes").minutes;
-                if (!sleepStart || start < sleepStart) sleepStart = overlap.start;
-                if (!sleepEnd || end > sleepEnd) sleepEnd = overlap.end;
+                totalMinutes += end.diff(start, ["minutes"]).minutes;
+
+                if (!sleepStart || start.valueOf() < sleepStart.valueOf()) {
+                    sleepStart = start;
+                }
+
+                if (!sleepEnd || end.valueOf() > sleepEnd.valueOf()) {
+                    sleepEnd = overlap.end;
+                }
             }
         }
 
@@ -102,12 +139,18 @@ export default async (app: App) => {
 
         const details = nightSessions
             .map(s => {
-                const start = DateTime.fromISO(s.start).setZone("Europe/London");
-                const end = DateTime.fromISO(s.end).setZone("Europe/London");
+                const start = DateTime.fromISO(s.start);
+                const end = DateTime.fromISO(s.end);
+                const overlap = nightInterval.intersection(Interval.fromDateTimes(start, end));
+                if (!overlap || !overlap.start || !overlap.end) return null;
+
                 const dur = end.diff(start, ["hours", "minutes"]);
+
                 return `• ${start.toFormat("HH:mm")} → ${end.toFormat("HH:mm")} (${Math.floor(dur.hours)}h ${Math.round(dur.minutes)}m)`;
             })
+            .filter(Boolean)
             .join("\n");
+
 
         const lastSleep = nightSessions[nightSessions.length - 1];
 
@@ -124,7 +167,7 @@ export default async (app: App) => {
             cache = {
                 lastRun: Date.now(),
                 lastPostedId: lastSleep?.id,
-                data
+                data: rawData
             };
 
 

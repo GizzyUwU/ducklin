@@ -86,7 +86,8 @@ export default async (app: App) => {
                 } else {
                     stepsCache = {
                         lastRun: Date.now(),
-                        data
+                        data,
+                        eodPosted: false
                     }
                 }
 
