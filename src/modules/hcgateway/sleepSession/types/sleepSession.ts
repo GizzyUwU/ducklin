@@ -3,7 +3,7 @@ export type SleepSessionItem = {
     app: string;
     data: {
         notes: string;
-        stages: string[];
+        stages: { stage: number; startTime: string; endTime: string }[];
         title: string;
     }
     end: string;

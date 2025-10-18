@@ -1,5 +1,5 @@
 import type { App } from "@slack/bolt";
-import type { SleepSessionResponse } from "./types/sleepSession";
+import type { SleepSessionItem, SleepSessionResponse } from "./types/sleepSession";
 import { grabData } from "../fetch";
 import { grabUser } from "../login";
 import { DateTime, Interval } from "luxon";
@@ -29,32 +29,20 @@ export default async (app: App) => {
         return { latest: null };
     }
 
-    function dedupeSleepSessions(
-        sessions: { id?: string, start?: string; end?: string; source?: string }[]
-    ) {
-        const validSessions = sessions.filter(
-            (s): s is { id?: string; start: string; end: string; source?: string } =>
-                s.start !== undefined && s.end !== undefined
-        );
+    function dedupeSleepSessions(apiResults: SleepSessionItem[]): SleepSessionItem[] {
+        const deduped: SleepSessionItem[] = [];
+        const seenIntervals = new Set<string>();
 
-        return validSessions
-            .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
-            .filter((session, index, arr) => {
-                if (index === 0) return true;
+        for (const session of apiResults) {
+            if (!session.start || !session.end) continue;
+            const key = `${session.start}-${session.end}`;
+            if (seenIntervals.has(key)) continue;
 
-                const prev = arr[index - 1];
-                if (!prev) return true;
+            seenIntervals.add(key);
+            deduped.push(session);
+        }
 
-                const start = new Date(session.start).getTime();
-                const end = new Date(session.end).getTime();
-                const prevStart = new Date(prev.start).getTime();
-                const prevEnd = new Date(prev.end).getTime();
-
-                const overlap = Math.max(0, Math.min(end, prevEnd) - Math.max(start, prevStart));
-                const duration = Math.min(end - start, prevEnd - prevStart);
-
-                return overlap / duration < 0.9;
-            });
+        return deduped;
     }
 
     async function grabSleepAndPost() {
@@ -115,14 +103,20 @@ export default async (app: App) => {
         let totalMinutes = 0;
         let sleepStart: DateTime | null = null;
         let sleepEnd: DateTime | null = null;
+        const stageCounts: Record<number, number> = {};
 
-        for (const s of nightSessions) {
+        for (const s of sorted) {
             const start = DateTime.fromISO(s.start);
             const end = DateTime.fromISO(s.end);
             const overlap = nightInterval.intersection(Interval.fromDateTimes(start, end));
-
             if (overlap) {
                 totalMinutes += end.diff(start, ["minutes"]).minutes;
+                const stages = s.data?.stages;
+
+                for (const stageItem of stages) {
+                    const stageNum = stageItem.stage;
+                    stageCounts[stageNum] = (stageCounts[stageNum] || 0) + 1;
+                }
 
                 if (!sleepStart || start.valueOf() < sleepStart.valueOf()) {
                     sleepStart = start;
@@ -137,7 +131,7 @@ export default async (app: App) => {
         const totalHours = Math.floor(totalMinutes / 60);
         const totalMins = Math.round(totalMinutes % 60);
 
-        const details = nightSessions
+        const details = sorted
             .map(s => {
                 const start = DateTime.fromISO(s.start);
                 const end = DateTime.fromISO(s.end);
@@ -152,14 +146,23 @@ export default async (app: App) => {
             .join("\n");
 
 
-        const lastSleep = nightSessions[nightSessions.length - 1];
+        const lastSleep = sorted[sorted.length - 1];
 
         if (cache.lastPostedId === lastSleep?.id) {
             console.log("[HC_GATEWAY - Sleep] Last sleep already posted, skipping.");
         } else {
-            const message = `Woah eep time?\nTotal eep: ${totalHours}h ${totalMins}m between ${sleepStart?.toFormat("HH:mm")}–${sleepEnd?.toFormat("HH:mm")}\n\nSleep sessions:\n${details}`;
+            const stageLines = Object.entries(stageCounts)
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .map(([stage, count]) => `• Stage ${stage}: ${count}`)
+                .join("\n");
 
-            await app.client.chat.postMessage({
+            const message =
+                `Woah eep time?\n` +
+                `Total eep: ${totalHours}h ${totalMins}m between ${sleepStart?.toFormat("HH:mm")}–${sleepEnd?.toFormat("HH:mm")}\n\n` +
+                `Sleep Stages:\n${stageLines || "No sleep stages found"}\n\n` +
+                `Sleep sessions:\n${details}`;
+
+                await app.client.chat.postMessage({
                 channel: String(process.env.CHANNEL),
                 text: message
             });
